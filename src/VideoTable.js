@@ -1,6 +1,6 @@
 import React from 'react';
 
-const VideoTable = ({ videos, removeVideo, updateVideo }) => {
+const VideoTable = ({ videos, removeVideo, onPreview }) => {
   return (
     <table>
       <thead>
@@ -18,8 +18,8 @@ const VideoTable = ({ videos, removeVideo, updateVideo }) => {
             <td>{video.startTime}</td>
             <td>{video.endTime}</td>
             <td>
+              <button onClick={() => onPreview(index)}>Preview</button>
               <button onClick={() => removeVideo(index)}>Delete</button>
-              {/* Add editing functionality here if needed */}
             </td>
           </tr>
         ))}
