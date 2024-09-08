@@ -8,8 +8,8 @@
 # testing
 /coverage
 
-# production
-# /build - needed for public hosting
+# production; build folder contents should be copied to root directory
+/build
 
 # misc
 .DS_Store
