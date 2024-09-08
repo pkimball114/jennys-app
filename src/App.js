@@ -17,7 +17,7 @@ const App = () => {
 
   const handleSubmit = async () => {
     try {
-      const response = await axios.post('https://1qelpkw5bi.execute-api.us-west-2.amazonaws.com/v1/trivia-api', { videos });
+      const response = await axios.post('YOUR_API_ENDPOINT', { videos });
       console.log('API response:', response.data);
     } catch (error) {
       console.error('Error submitting videos:', error);

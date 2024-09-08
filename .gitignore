@@ -8,7 +8,7 @@
 # testing
 /coverage
 
-# production; build folder contents should be copied to root directory
+# production
 /build
 
 # misc
