@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import MultiRangeSlider from "./MultiRangeSlider";
 
-const InputForm = ({ addVideo, updatePreview }) => {
+const InputForm = ({ addVideo, updatePreview, updatePreviewWithTimestamps }) => {
   const [url, setUrl] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -18,9 +19,7 @@ const InputForm = ({ addVideo, updatePreview }) => {
   // Refresh the video (reset times and update preview)
   const handleRefreshVideo = () => {
     if (url) {
-      updatePreview(url); // Refresh the preview with the same URL
-      setStartTime(startTime);
-      setEndTime(endTime); // Reset times based on video duration
+      updatePreviewWithTimestamps(url, startTime, endTime); // Refresh the preview with the same URL
     }
   };
 
@@ -62,6 +61,11 @@ const InputForm = ({ addVideo, updatePreview }) => {
           required
         />
       </div>
+      <MultiRangeSlider
+        min={0}
+        max={1000}
+        onChange={({ min, max }) => console.log(`min = ${min}, max = ${max}`)}
+        />
       <button type="submit">Add Video</button>
       <button type="button" onClick={handleRefreshVideo} style={{ marginLeft: '10px' }}>
         Refresh Video

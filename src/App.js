@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import YouTubePlayer from './YouTubePlayer';
 import InputForm from './InputForm';
 import VideoTable from './VideoTable';
-import MultiRangeSlider from "./MultiRangeSlider";
 import axios from 'axios';
 
 const App = () => {
@@ -39,6 +38,13 @@ const App = () => {
     }
   };
 
+  const updatePreviewWithTimestamps = (url, startTime, endTime) => {
+    const videoId = extractVideoId(url);
+    if (videoId) {
+      setSelectedVideo({ videoId, startTime: startTime, endTime: endTime });
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const response = await axios.post('https://1qelpkw5bi.execute-api.us-west-2.amazonaws.com/v1/trivia-api', { videos });
@@ -51,7 +57,7 @@ const App = () => {
   return (
     <div>
       <h1>YouTube to Trivia Round MP3</h1>
-      <InputForm addVideo={addVideo} updatePreview={updatePreview} />
+      <InputForm addVideo={addVideo} updatePreview={updatePreview} updatePreviewWithTimestamps={updatePreviewWithTimestamps} />
       {selectedVideo && (
         <YouTubePlayer
           videoId={selectedVideo.videoId}
@@ -59,15 +65,10 @@ const App = () => {
           endTime={selectedVideo.endTime}
         />
       )}
-      <MultiRangeSlider
-        min={0}
-        max={1000}
-        onChange={({ min, max }) => console.log(`min = ${min}, max = ${max}`)}
-      />
       <VideoTable
         videos={videos}
         removeVideo={removeVideo}
-        onPreview={handlePreview}  // Pass the preview handler
+        onPreview={handlePreview} // Pass the preview handler
       />
       {videos.length > 0 && <button onClick={handleSubmit}>Submit for Processing</button>}
     </div>
