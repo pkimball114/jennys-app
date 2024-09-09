@@ -15,6 +15,12 @@ const InputForm = ({ addVideo }) => {
     }
   };
 
+  const handleUrlChange = (e) => {
+    const newUrl = e.target.value;
+    setUrl(newUrl);
+    updatePreview(newUrl);  // Trigger preview update when URL changes
+  };
+
   return (
     <form onSubmit={handleSubmit}>
       <div>
@@ -22,7 +28,7 @@ const InputForm = ({ addVideo }) => {
         <input
           type="text"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={handleUrlChange}
           placeholder="Enter YouTube URL"
           required
         />

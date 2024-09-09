@@ -31,6 +31,13 @@ const App = () => {
     setSelectedVideo(videos[index]);
   };
 
+  const updatePreview = (url) => {
+    const videoId = extractVideoId(url);
+    if (videoId) {
+      setSelectedVideo({ videoId, startTime: 0, endTime: 0 });  // Default to 0 for now
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const response = await axios.post('https://1qelpkw5bi.execute-api.us-west-2.amazonaws.com/v1/trivia-api', { videos });
@@ -43,12 +50,7 @@ const App = () => {
   return (
     <div>
       <h1>YouTube to Trivia Round MP3</h1>
-      <InputForm addVideo={addVideo} />
-      <VideoTable
-        videos={videos}
-        removeVideo={removeVideo}
-        onPreview={handlePreview}  // Pass the preview handler
-      />
+      <InputForm addVideo={addVideo} updatePreview={updatePreview} />
       {selectedVideo && (
         <YouTubePlayer
           videoId={selectedVideo.videoId}
@@ -56,6 +58,11 @@ const App = () => {
           endTime={selectedVideo.endTime}
         />
       )}
+      <VideoTable
+        videos={videos}
+        removeVideo={removeVideo}
+        onPreview={handlePreview}  // Pass the preview handler
+      />
       {videos.length > 0 && <button onClick={handleSubmit}>Submit for Processing</button>}
     </div>
   );
