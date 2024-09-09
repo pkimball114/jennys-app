@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const InputForm = ({ addVideo }) => {
+const InputForm = ({ addVideo, updatePreview }) => {
   const [url, setUrl] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
