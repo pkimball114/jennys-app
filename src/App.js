@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import YouTubePlayer from './YouTubePlayer';
 import InputForm from './InputForm';
 import VideoTable from './VideoTable';
+import MultiRangeSlider from "./MultiRangeSlider";
 import axios from 'axios';
 
 const App = () => {
@@ -58,6 +59,11 @@ const App = () => {
           endTime={selectedVideo.endTime}
         />
       )}
+      <MultiRangeSlider
+        min={0}
+        max={1000}
+        onChange={({ min, max }) => console.log(`min = ${min}, max = ${max}`)}
+      />
       <VideoTable
         videos={videos}
         removeVideo={removeVideo}
