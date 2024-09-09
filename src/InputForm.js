@@ -15,6 +15,15 @@ const InputForm = ({ addVideo, updatePreview }) => {
     }
   };
 
+  // Refresh the video (reset times and update preview)
+  const handleRefreshVideo = () => {
+    if (url) {
+      updatePreview(url); // Refresh the preview with the same URL
+      setStartTime(startTime);
+      setEndTime(endTime); // Reset times based on video duration
+    }
+  };
+
   const handleUrlChange = (e) => {
     const newUrl = e.target.value;
     setUrl(newUrl);
@@ -54,6 +63,9 @@ const InputForm = ({ addVideo, updatePreview }) => {
         />
       </div>
       <button type="submit">Add Video</button>
+      <button type="button" onClick={handleRefreshVideo} style={{ marginLeft: '10px' }}>
+        Refresh Video
+      </button>
     </form>
   );
 };
