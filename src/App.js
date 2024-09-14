@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import YouTubePlayer from './YouTubePlayer';
+import YouTubePlayer from './YoutubePlayer';
 import InputForm from './InputForm';
 import VideoTable from './VideoTable';
 import axios from 'axios';
