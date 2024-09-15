@@ -24,10 +24,12 @@ const VideoTable = ({ videos, removeVideo, previewVideo, updateVideos }) => {
   };
 
   return (
-    <table>
-      <thead>
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
         <tr>
-          <th>URL</th>
+          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            URL
+          </th>
           <th>Start Time</th>
           <th>End Time</th>
           <th>Song Title</th>
@@ -35,10 +37,12 @@ const VideoTable = ({ videos, removeVideo, previewVideo, updateVideos }) => {
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className="bg-white divide-y divide-gray-200">
         {editedVideos.map((video, index) => (
           <tr key={index}>
-            <td>{video.url}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {video.url}
+            </td>
             <td>{video.startTime}</td>
             <td>{video.endTime}</td>
             <td>

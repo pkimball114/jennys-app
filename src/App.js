@@ -3,6 +3,7 @@ import YouTubePlayer from './YoutubePlayer';
 import InputForm from './InputForm';
 import VideoTable from './VideoTable';
 import axios from 'axios';
+import './index.css';
 
 const App = () => {
   const [videos, setVideos] = useState([]);
@@ -60,7 +61,7 @@ const App = () => {
 
   return (
     <div>
-      <h1>YouTube to Trivia Round MP3</h1>
+      <h1 class="">YouTube to Trivia Round MP3</h1>
       <InputForm 
         addVideo={addVideo} 
         updatePreview={updatePreview} 
