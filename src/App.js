@@ -19,6 +19,10 @@ const App = () => {
     setVideos([...videos, { ...video, videoId }]);
   };
 
+  const updateVideos = (newVideos) => {
+    setVideos(newVideos);
+  };
+
   const removeVideo = (index) => {
     const updatedVideos = videos.filter((_, i) => i !== index);
     setVideos(updatedVideos);
@@ -27,8 +31,8 @@ const App = () => {
     }
   };
 
-  const handlePreview = (index) => {
-    setSelectedVideo(videos[index]);
+  const previewVideo = (video) => {
+    setSelectedVideo(video);
   };
 
   const updatePreview = (url) => {
@@ -57,7 +61,10 @@ const App = () => {
   return (
     <div>
       <h1>YouTube to Trivia Round MP3</h1>
-      <InputForm addVideo={addVideo} updatePreview={updatePreview} updatePreviewWithTimestamps={updatePreviewWithTimestamps} />
+      <InputForm 
+        addVideo={addVideo} 
+        updatePreview={updatePreview} 
+        updatePreviewWithTimestamps={updatePreviewWithTimestamps} />
       {selectedVideo && (
         <YouTubePlayer
           videoId={selectedVideo.videoId}
@@ -68,7 +75,8 @@ const App = () => {
       <VideoTable
         videos={videos}
         removeVideo={removeVideo}
-        onPreview={handlePreview} // Pass the preview handler
+        previewVideo={previewVideo}
+        updateVideos={updateVideos}
       />
       {videos.length > 0 && <button onClick={handleSubmit}>Submit for Processing</button>}
     </div>
