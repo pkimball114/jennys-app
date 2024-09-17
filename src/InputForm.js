@@ -1,19 +1,44 @@
 import React, { useState } from 'react';
+import { toSeconds, formatTimeInput, fixTimeFormat } from './Utils'; 
 
 const InputForm = ({ addVideo, updatePreview, updatePreviewWithTimestamps }) => {
   const [url, setUrl] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [startTime, setStartTime] = useState(0);
+  const [endTime, setEndTime] = useState(0);
+  const [startTimeFormatted, setStartTimeFormatted] = useState('00:00');
+  const [endTimeFormatted, setEndTimeFormatted] = useState('00:00');
   const [songTitle, setSongTitle] = useState('');
   const [artist, setArtist] = useState('');
 
+  // Handle changes to the formatted time inputs
+  const handleTimeChange = (value, setFormattedTime, setActualTime) => {
+    const formattedTime = formatTimeInput(value);
+    setFormattedTime(formattedTime);
+    try {
+      const seconds = toSeconds(formattedTime);
+      setActualTime(seconds);
+    } catch (error) {
+      console.error(error);  // Handle or display this error appropriately
+    }
+  };
+
+  const handleTimeBlur = (setFormattedTime) => {
+    setFormattedTime(current => {
+      const fixed = fixTimeFormat(current);
+      setFormattedTime(fixed);
+      return fixed;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (url && startTime && endTime && songTitle && artist) {
+    if (url && startTimeFormatted && endTimeFormatted && songTitle && artist) {
       addVideo({ url, startTime, endTime, songTitle, artist });
       setUrl('');
-      setStartTime('');
-      setEndTime('');
+      setStartTimeFormatted('00:00');
+      setEndTimeFormatted('00:00');
+      setStartTime(0);
+      setEndTime(0);
       setSongTitle('');
       setArtist('');
     }
@@ -49,24 +74,26 @@ const InputForm = ({ addVideo, updatePreview, updatePreviewWithTimestamps }) => 
       {/* Start Time and End Time side-by-side */}
       <div className="flex space-x-4">
         <div className="flex-1">
-          <label className="block text-gray-700 text-sm font-bold mb-2">Start Time (seconds):</label>
+          <label className="block text-gray-700 text-sm font-bold mb-2">Start Time:</label>
           <input
-            type="number"
+            type="text"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            placeholder="Start time"
+            value={startTimeFormatted}
+            onChange={(e) => handleTimeChange(e.target.value, setStartTimeFormatted, setStartTime)}
+            onBlur={() => handleTimeBlur(setStartTimeFormatted)}
+            placeholder="00:00"
             required
           />
         </div>
         <div className="flex-1">
-          <label className="block text-gray-700 text-sm font-bold mb-2">End Time (seconds):</label>
+          <label className="block text-gray-700 text-sm font-bold mb-2">End Time:</label>
           <input
-            type="number"
+            type="text"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            placeholder="End time"
+            value={endTimeFormatted}
+            onChange={(e) => handleTimeChange(e.target.value, setEndTimeFormatted, setEndTime)}
+            onBlur={() => handleTimeBlur(setEndTimeFormatted)}
+            placeholder="00:00"
             required
           />
         </div>
