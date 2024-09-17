@@ -36,3 +36,15 @@ export const fixTimeFormat = (value) => {
     if (seconds > 59) seconds = 59; // Ensure seconds don't exceed 59
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
+
+export const downloadJsonFile = (jsonStr, filename) => {
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'download.json';  // Provide a default filename if none is specified
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};

@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/jennys-app/static/css/main.e27aec1b.css",
-    "main.js": "/jennys-app/static/js/main.7aa3b967.js",
+    "main.css": "/jennys-app/static/css/main.bcd5fd58.css",
+    "main.js": "/jennys-app/static/js/main.43934b20.js",
     "static/js/453.893cdc28.chunk.js": "/jennys-app/static/js/453.893cdc28.chunk.js",
     "index.html": "/jennys-app/index.html",
-    "main.e27aec1b.css.map": "/jennys-app/static/css/main.e27aec1b.css.map",
-    "main.7aa3b967.js.map": "/jennys-app/static/js/main.7aa3b967.js.map",
+    "main.bcd5fd58.css.map": "/jennys-app/static/css/main.bcd5fd58.css.map",
+    "main.43934b20.js.map": "/jennys-app/static/js/main.43934b20.js.map",
     "453.893cdc28.chunk.js.map": "/jennys-app/static/js/453.893cdc28.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.e27aec1b.css",
-    "static/js/main.7aa3b967.js"
+    "static/css/main.bcd5fd58.css",
+    "static/js/main.43934b20.js"
   ]
 }
