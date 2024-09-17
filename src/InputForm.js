@@ -26,7 +26,8 @@ const InputForm = ({ addVideo, updatePreview, updatePreviewWithTimestamps }) => 
   };
 
   // Refresh the video (reset times and update preview with timestamps)
-  const handleRefreshVideo = () => {
+  const handleRefreshVideo = (e) => {
+    e.preventDefault();
     if (url) {
       updatePreviewWithTimestamps(url, startTime, endTime);
     }
@@ -35,60 +36,80 @@ const InputForm = ({ addVideo, updatePreview, updatePreviewWithTimestamps }) => 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700">YouTube URL:</label>
+        <label className="block text-gray-700 text-sm font-bold mb-2">YouTube URL:</label>
         <input
           type="text"
+          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
           value={url}
           onChange={handleUrlChange}
           placeholder="Enter YouTube URL"
           required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         />
       </div>
-      <div>
-        <label>Start Time (seconds):</label>
-        <input
-          type="number"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          placeholder="Start time"
-          required
-        />
+      {/* Start Time and End Time side-by-side */}
+      <div className="flex space-x-4">
+        <div className="flex-1">
+          <label className="block text-gray-700 text-sm font-bold mb-2">Start Time (seconds):</label>
+          <input
+            type="number"
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            placeholder="Start time"
+            required
+          />
+        </div>
+        <div className="flex-1">
+          <label className="block text-gray-700 text-sm font-bold mb-2">End Time (seconds):</label>
+          <input
+            type="number"
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            placeholder="End time"
+            required
+          />
+        </div>
       </div>
-      <div>
-        <label>End Time (seconds):</label>
-        <input
-          type="number"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-          placeholder="End time"
-          required
-        />
+      {/* Song Title and Artist side-by-side */}
+      <div className="flex space-x-4">
+        <div className="flex-1">
+          <label className="block text-gray-700 text-sm font-bold mb-2">Song Title:</label>
+          <input
+            type="text"
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            value={songTitle}
+            onChange={(e) => setSongTitle(e.target.value)}
+            placeholder="Song Title"
+            required
+          />
+        </div>
+        <div className="flex-1">
+          <label className="block text-gray-700 text-sm font-bold mb-2">Artist:</label>
+          <input
+            type="text"
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            value={artist}
+            onChange={(e) => setArtist(e.target.value)}
+            placeholder="Artist"
+            required
+          />
+        </div>
       </div>
-      <div>
-        <label>Song Title:</label>
-        <input
-          type="text"
-          value={songTitle}
-          onChange={(e) => setSongTitle(e.target.value)}
-          placeholder="Song Title"
-          required
-        />
+      <div className="mt-4 flex justify-center space-x-4">
+        <button 
+          type="submit" 
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Add Video
+        </button>
+        <button 
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          onClick={handleRefreshVideo} // Define this function as needed
+        >
+          Refresh Video
+        </button>
       </div>
-      <div>
-        <label>Artist:</label>
-        <input
-          type="text"
-          value={artist}
-          onChange={(e) => setArtist(e.target.value)}
-          placeholder="Artist"
-          required
-        />
-      </div>
-      <button type="submit">Add Video</button>
-      <button type="button" onClick={handleRefreshVideo} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-        Refresh Video
-      </button>
     </form>
   );
 };

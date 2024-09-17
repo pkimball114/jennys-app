@@ -24,27 +24,32 @@ const VideoTable = ({ videos, removeVideo, previewVideo, updateVideos }) => {
   };
 
   return (
-    <table className="min-w-full divide-y divide-gray-200">
+    <table className="min-w-full leading-normal">
       <thead className="bg-gray-50">
         <tr>
-          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            Song Title
+          </th>
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            Artist
+          </th>
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            Start Time
+          </th>
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            End Time
+          </th>
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
             URL
           </th>
-          <th>Start Time</th>
-          <th>End Time</th>
-          <th>Song Title</th>
-          <th>Artist</th>
-          <th>Actions</th>
+          <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            Actions
+          </th>
         </tr>
       </thead>
       <tbody className="bg-white divide-y divide-gray-200">
         {editedVideos.map((video, index) => (
           <tr key={index}>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {video.url}
-            </td>
-            <td>{video.startTime}</td>
-            <td>{video.endTime}</td>
             <td>
               <input
                 type="text"
@@ -58,6 +63,33 @@ const VideoTable = ({ videos, removeVideo, previewVideo, updateVideos }) => {
                 value={video.artist}
                 onChange={(e) => handleFieldChange(index, 'artist', e.target.value)}
               />
+            </td>
+            <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+              <div className="flex items-center">
+                <div className="ml-3">
+                  <p className="text-gray-900 whitespace-no-wrap">
+                    {video.startTime}
+                  </p>
+                </div>
+              </div>
+            </td>
+            <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+              <div className="flex items-center">
+                <div className="ml-3">
+                  <p className="text-gray-900 whitespace-no-wrap">
+                    {video.endTime}
+                  </p>
+                </div>
+              </div>
+            </td>
+            <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+              <div className="flex items-center">
+                <div className="ml-3">
+                  <p className="text-gray-900 whitespace-no-wrap">
+                    {video.url}
+                  </p>
+                </div>
+              </div>
             </td>
             <td>
               <button onClick={() => moveRow(index, -1)}>&uarr;</button>
