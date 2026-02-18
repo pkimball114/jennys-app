@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import YouTubePlayer from './YouTubePlayer';
 import './App.css'; // Import the CSS file
 import axios from 'axios';
@@ -56,9 +56,28 @@ function normalizeYouTubeUrl(input) {
 	return { videoId: '', normalizedUrl: '' };
 }
 
+function normalizeClipRow(rawRow) {
+	const row = rawRow || {};
+	const parsedFromVideoId = normalizeYouTubeUrl(row.videoId || '');
+	const parsedFromUrl = normalizeYouTubeUrl(row.url || '');
+	const normalizedVideoId = parsedFromVideoId.videoId || parsedFromUrl.videoId || '';
+
+	return {
+		videoId: normalizedVideoId || (typeof row.videoId === 'string' ? row.videoId : ''),
+		videoTitle: row.videoTitle ?? '',
+		songTitle: row.songTitle ?? '',
+		artist: row.artist ?? '',
+		startTime: row.startTime ?? '',
+		endTime: row.endTime ?? '',
+		audioUrl: row.audioUrl ?? null
+	};
+}
+
 function App() {
 	const [videoId, setVideoId] = useState('');
 	const [videoTitle, setVideoTitle] = useState('');
+	const [songTitle, setSongTitle] = useState('');
+	const [artist, setArtist] = useState('');
 	const [startTime, setStartTime] = useState('');
 	const [endTime, setEndTime] = useState('');
 	const [_audioUrl, setAudioUrl] = useState('');
@@ -68,6 +87,8 @@ function App() {
 	const [endTimeConverted, setEndTimeConverted] = useState('');
 	const [isGeneratingMp3, setIsGeneratingMp3] = useState(false);
 	const [generateMp3Error, setGenerateMp3Error] = useState('');
+	const [copiedRowIndex, setCopiedRowIndex] = useState(null);
+	const fileInputRef = useRef(null);
 	const { videoId: parsedVideoId } = normalizeYouTubeUrl(videoId);
 
 	useEffect(() => {
@@ -79,7 +100,8 @@ function App() {
 
 			const parsedRound = JSON.parse(savedRound);
 			if (Array.isArray(parsedRound)) {
-				setTableData(parsedRound);
+				const normalizedRound = parsedRound.map((row) => normalizeClipRow(row));
+				setTableData(normalizedRound);
 			}
 		} catch (error) {
 			console.error('Error restoring saved round:', error);
@@ -176,11 +198,11 @@ function App() {
 				// Update the state after getting the audio URL
 				setAudioUrl(audioUrl);
 
-				// Add a new row
-				setTableData((prevData) => [
-					...prevData,
-					{ videoId, videoTitle, startTime, endTime, audioUrl }
-				]);
+					// Add a new row
+					setTableData((prevData) => [
+						...prevData,
+						{ videoId, videoTitle, songTitle, artist, startTime, endTime, audioUrl }
+					]);
 
 				// // Check if the app is in edit mode or adding a new row
 				// if (isEditMode && selectedRowIndex !== null) {
@@ -202,11 +224,13 @@ function App() {
 				// }
 
 				// Reset form values
-				setVideoId('');
-				setVideoTitle('');
-				setStartTime('');
-				setEndTime('');
-				setAudioUrl('');
+					setVideoId('');
+					setVideoTitle('');
+					setSongTitle('');
+					setArtist('');
+					setStartTime('');
+					setEndTime('');
+					setAudioUrl('');
 			})
 			.catch((error) => {
 				console.error('Error triggering audio creation on the server:', error);
@@ -240,16 +264,27 @@ function App() {
 		}
 	};
 
-	const handlePlayClick = (index) => {
-		// Set the form values to the selected row's values
-		const selectedRow = tableData[index];
+	const loadRowToForm = (selectedRow) => {
 		setVideoId(selectedRow.videoId);
 		setVideoTitle(selectedRow.videoTitle);
+		setSongTitle(selectedRow.songTitle || '');
+		setArtist(selectedRow.artist || '');
 		setStartTime(selectedRow.startTime);
 		setStartTimeConverted(convertTime(selectedRow.startTime));
 		setEndTime(selectedRow.endTime);
 		setEndTimeConverted(convertTime(selectedRow.endTime));
 		setAudioUrl(selectedRow.audioUrl);
+	};
+
+	const handlePreviewClick = (index) => {
+		const selectedRow = tableData[index];
+		loadRowToForm(selectedRow);
+	};
+
+	const handlePlayClick = (index) => {
+		// Set the form values to the selected row's values
+		const selectedRow = tableData[index];
+		loadRowToForm(selectedRow);
 
 		// Play the corresponding intro and main audio
 		const audioIntro = new Audio(`/number_${index + 1}.mp3`);
@@ -281,6 +316,26 @@ function App() {
 		document.addEventListener('click', handleDocumentClick);
 	};
 
+	const handleCopyUrlClick = async (index) => {
+		const selectedRow = tableData[index];
+		const normalized = normalizeYouTubeUrl(selectedRow.videoId);
+		const urlToCopy = normalized.normalizedUrl || selectedRow.videoId || '';
+
+		if (!urlToCopy) {
+			return;
+		}
+
+		try {
+			await navigator.clipboard.writeText(urlToCopy);
+			setCopiedRowIndex(index);
+			setTimeout(() => {
+				setCopiedRowIndex((current) => (current === index ? null : current));
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy URL:', error);
+		}
+	};
+
 	const handleClearRoundClick = () => {
 		const shouldClear = window.confirm('Clear all clips from this round?');
 		if (!shouldClear) {
@@ -306,6 +361,41 @@ function App() {
 		downloadLink.click();
 		document.body.removeChild(downloadLink);
 		URL.revokeObjectURL(objectUrl);
+	};
+
+	const handleLoadPreviousRounds = () => {
+		fileInputRef.current?.click();
+	};
+
+	const handleFileUpload = async (event) => {
+		const file = event.target.files?.[0];
+		if (!file) {
+			return;
+		}
+
+		try {
+			const fileContents = await file.text();
+			const parsedJson = JSON.parse(fileContents);
+			const importedRows = Array.isArray(parsedJson)
+				? parsedJson
+				: Array.isArray(parsedJson?.clips)
+					? parsedJson.clips
+					: Array.isArray(parsedJson?.videos)
+						? parsedJson.videos
+						: null;
+
+			if (!importedRows) {
+				throw new Error('JSON does not contain a valid clips or videos array.');
+			}
+
+			const normalizedRows = importedRows.map((row) => normalizeClipRow(row));
+			setTableData(normalizedRows);
+		} catch (error) {
+			console.error('Error importing round JSON:', error);
+			alert('Failed to load the file: Invalid or unsupported JSON format.');
+		} finally {
+			event.target.value = '';
+		}
 	};
 
 	const handleGenerateMp3Click = async () => {
@@ -376,104 +466,196 @@ function App() {
 	};
 
 	return (
-		<div className="app-container">
-			<div className="app">
-				<input
-					type="text"
-					placeholder="Enter YouTube Video URL or ID"
-					value={videoId}
-					onChange={(e) => setVideoId(e.target.value)}
-				/>
-					<YouTubePlayer
-						videoId={parsedVideoId}
-						startTime={startTimeConverted.toString()}
-						endTime={endTimeConverted.toString()}
-						key={key} />
-				<input
-					type="text"
-					placeholder="Video Title"
-					value={videoTitle}
-					onChange={(e) => setVideoTitle(e.target.value)}
-				/>
-				<div className="time-inputs">
-					<label>
-						Start Time:
-						<input
-							type="text"
-							placeholder="0:00"
-							value={startTime}
-							onChange={handleStartTimeChange}
-						/>
-						<input
-							type="hidden"
-							value={startTimeConverted}
-						/>
-					</label>
-					<label>
-						End Time:
-						<input
-							type="text"
-							placeholder="0:00"
-							value={endTime}
-							onChange={handleEndTimeChange}
-						/>
-						<input
-							type="hidden"
-							value={endTimeConverted}
-						/>
-					</label>
-						<button onClick={handleReloadVideoClick}>Reload Video</button>
-						</div>
-						<button onClick={handleCompleteClick}>Complete</button>
-						<button onClick={handleClearRoundClick}>Clear round</button>
-						<button onClick={handleExportRoundJsonClick}>Export round JSON</button>
-						<button onClick={handleGenerateMp3Click} disabled={isGeneratingMp3}>
-							{isGeneratingMp3 ? 'Generating MP3...' : 'Generate MP3'}
+		<div className="min-h-screen bg-gray-100 py-8">
+			<div className="container mx-auto max-w-6xl px-4">
+				<div className="rounded-lg bg-white p-6 shadow-md">
+					<div className="mb-6 flex items-center justify-between">
+						<h1 className="text-2xl font-bold text-gray-900">Music Round Builder</h1>
+						<button
+							className="rounded-md bg-gray-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400"
+							onClick={handleLoadPreviousRounds}
+						>
+							Load Previous Rounds
 						</button>
-						{generateMp3Error && <p>{generateMp3Error}</p>}
-						<EditableTable
-							data={tableData}
-					onDelete={handleDeleteClick}
-					onMoveUp={handleMoveUpClick}
-					onMoveDown={handleMoveDownClick}
-					onPlay={handlePlayClick}
-					showVideoId={false}  // Set to true if you want to display the videoId column
-				/>
+						<input
+							ref={fileInputRef}
+							type="file"
+							accept=".json,application/json"
+							onChange={handleFileUpload}
+							className="hidden"
+						/>
+					</div>
+						<div className="space-y-4">
+							<input
+								className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+								type="text"
+								placeholder="Enter YouTube Video URL or ID"
+								value={videoId}
+								onChange={(e) => setVideoId(e.target.value)}
+							/>
+						<YouTubePlayer
+							videoId={parsedVideoId}
+							startTime={startTimeConverted.toString()}
+							endTime={endTimeConverted.toString()}
+							key={key}
+						/>
+							<input
+								className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+								type="text"
+								placeholder="Video Title"
+								value={videoTitle}
+								onChange={(e) => setVideoTitle(e.target.value)}
+							/>
+							<div className="grid gap-4 md:grid-cols-2">
+								<input
+									className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+									type="text"
+									placeholder="Song Title (optional)"
+									value={songTitle}
+									onChange={(e) => setSongTitle(e.target.value)}
+								/>
+								<input
+									className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+									type="text"
+									placeholder="Artist (optional)"
+									value={artist}
+									onChange={(e) => setArtist(e.target.value)}
+								/>
+							</div>
+						<div className="grid gap-4 md:grid-cols-3">
+							<label className="text-sm font-medium text-gray-700">
+								Start Time:
+									<input
+										className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+										type="text"
+										placeholder="0:00"
+										value={startTime}
+										onChange={handleStartTimeChange}
+								/>
+								<input
+									type="hidden"
+									value={startTimeConverted}
+								/>
+							</label>
+							<label className="text-sm font-medium text-gray-700">
+								End Time:
+									<input
+										className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+										type="text"
+										placeholder="0:00"
+										value={endTime}
+										onChange={handleEndTimeChange}
+								/>
+								<input
+									type="hidden"
+									value={endTimeConverted}
+								/>
+							</label>
+								<div className="flex items-end">
+									<button
+										className="w-full rounded-md bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 transition hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
+										onClick={handleReloadVideoClick}
+									>
+										Reload Video
+									</button>
+							</div>
+						</div>
+							<div className="flex flex-wrap gap-2">
+								<button
+									className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+									onClick={handleCompleteClick}
+								>
+									Complete
+								</button>
+								<button
+									className="rounded-md bg-gray-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300"
+									onClick={handleClearRoundClick}
+								>
+									Clear round
+								</button>
+								<button
+									className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+									onClick={handleExportRoundJsonClick}
+								>
+									Export round JSON
+								</button>
+								<button
+									className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-60"
+									onClick={handleGenerateMp3Click}
+									disabled={isGeneratingMp3}
+								>
+									{isGeneratingMp3 ? 'Generating MP3...' : 'Generate MP3'}
+							</button>
+						</div>
+						{generateMp3Error && <p className="text-sm text-red-600">{generateMp3Error}</p>}
+							<EditableTable
+								data={tableData}
+								onDelete={handleDeleteClick}
+								onMoveUp={handleMoveUpClick}
+								onMoveDown={handleMoveDownClick}
+								onPreview={handlePreviewClick}
+								onPlay={handlePlayClick}
+								onCopyUrl={handleCopyUrlClick}
+								copiedRowIndex={copiedRowIndex}
+								showVideoId={false}
+							/>
+						</div>
+				</div>
 			</div>
 		</div>
 	);
 }
 
 // Table component
-const EditableTable = ({ data, onDelete, onMoveUp, onMoveDown, onPlay, showVideoId }) => {
+const EditableTable = ({
+	data,
+	onDelete,
+	onMoveUp,
+	onMoveDown,
+	onPreview,
+	onPlay,
+	onCopyUrl,
+	copiedRowIndex,
+	showVideoId
+}) => {
 	return (
-		<div>
-			<table>
-				<thead>
+		<div className="overflow-x-auto rounded-md border border-gray-200">
+			<table className="min-w-full border-collapse">
+				<thead className="bg-gray-50">
 					<tr>
-						<th></th>
-						{showVideoId && <th>Video ID</th>}
-						<th>Video Title</th>
-						<th>Start Time</th>
-						<th>End Time</th>
-						<th>Audio URL</th>
-						<th>Action</th>
+						<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600"></th>
+						{showVideoId && <th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Video ID</th>}
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Video Title</th>
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Song Title</th>
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Artist</th>
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Start Time</th>
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">End Time</th>
+							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Audio URL</th>
+						<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Action</th>
 					</tr>
 				</thead>
-				<tbody>
-					{data.map((row, index) => (
-						<tr key={index}>
-							<td>{index + 1}</td> {/* Display row number */}
-							{showVideoId && <td>{row.videoId}</td>}
-							<td>{row.videoTitle}</td>
-							<td>{row.startTime}</td>
-							<td>{row.endTime}</td>
-							<td>{row.audioUrl}</td>
-							<td>
-								<button onClick={() => onDelete(index)}><FaTrash /></button>
-								<button onClick={() => onMoveUp(index)}><FaArrowUp /></button>
-								<button onClick={() => onMoveDown(index)}><FaArrowDown /></button>
-								<button onClick={() => onPlay(index)}><FaPlay /></button>
+					<tbody className="divide-y divide-gray-200 bg-white">
+						{data.map((row, index) => (
+							<tr key={index} className="hover:bg-gray-50">
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{index + 1}</td>
+								{showVideoId && <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.videoId}</td>}
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.videoTitle}</td>
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.songTitle || ''}</td>
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.artist || ''}</td>
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.startTime}</td>
+								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.endTime}</td>
+								<td className="max-w-xs truncate border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.audioUrl}</td>
+								<td className="border border-gray-200 px-3 py-2">
+									<div className="flex gap-2">
+										<button className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onPreview(index)}>Preview</button>
+										<button className="rounded-md bg-slate-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300" onClick={() => onCopyUrl(index)}>
+											{copiedRowIndex === index ? 'Copied!' : 'Copy URL'}
+										</button>
+										<button className="rounded-md bg-green-500 px-2 py-1 text-white transition hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300" onClick={() => onPlay(index)}><FaPlay /></button>
+										<button className="rounded-md bg-blue-500 px-2 py-1 text-white transition hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onMoveUp(index)}><FaArrowUp /></button>
+										<button className="rounded-md bg-blue-500 px-2 py-1 text-white transition hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onMoveDown(index)}><FaArrowDown /></button>
+										<button className="rounded-md bg-red-500 px-2 py-1 text-white transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300" onClick={() => onDelete(index)}><FaTrash /></button>
+									</div>
 								{/* <button onClick={() => onPause(index)}><FaPause /></button> */}
 							</td>
 						</tr>

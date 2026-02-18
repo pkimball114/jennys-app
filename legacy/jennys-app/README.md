@@ -2,10 +2,6 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## App Note
-
-Round clips now support optional metadata fields: `songTitle` and `artist`. These fields are stored in local round data and included when exporting round JSON.
-
 ## Available Scripts
 
 In the project directory, you can run:

@@ -6,18 +6,17 @@ function YouTubePlayer({ videoId, startTime, endTime }) {
   const youtubeUrl = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}`;
 
   return (
-    <div className="youtube-player">
+    <div className="overflow-hidden rounded-md border border-gray-200 bg-black shadow-sm">
       {videoId ? (
         <iframe
           key={videoId}  // Add the key as part of the iframe to force re-render
           title="YouTube Video Player"
-          width="560"
-          height="315"
+          className="aspect-video w-full"
           src={youtubeUrl}
           allowFullScreen
         ></iframe>
       ) : (
-        <img src="https://placehold.co/560x315" alt="Placeholder" />
+        <img className="aspect-video w-full object-cover" src="https://placehold.co/560x315" alt="Placeholder" />
       )}
     </div>
   );
