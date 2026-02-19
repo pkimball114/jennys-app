@@ -1,669 +1,426 @@
-import React, { useState, useEffect, useRef } from 'react';
-import YouTubePlayer from './YouTubePlayer';
-import './App.css'; // Import the CSS file
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import openSocket from "socket.io-client";
-import { FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaPlay, FaPause } from 'react-icons/fa';
+import YouTubePlayer from './YouTubePlayer';
+import InputForm from './InputForm';
+import VideoTable from './VideoTable';
+import { downloadJsonFile, toSeconds } from './Utils';
 
-// const socket = openSocket(URL);
 const ROUND_STORAGE_KEY = 'musicRound.tableData.v1';
 
 function normalizeYouTubeUrl(input) {
-	if (!input) {
-		return { videoId: '', normalizedUrl: '' };
-	}
+  if (!input) {
+    return { videoId: '', normalizedUrl: '' };
+  }
 
-	const trimmedInput = input.trim();
-	const rawVideoIdPattern = /^[a-zA-Z0-9_-]{11}$/;
+  const trimmedInput = String(input).trim();
+  const rawVideoIdPattern = /^[a-zA-Z0-9_-]{11}$/;
 
-	if (rawVideoIdPattern.test(trimmedInput)) {
-		return {
-			videoId: trimmedInput,
-			normalizedUrl: `https://www.youtube.com/watch?v=${trimmedInput}`
-		};
-	}
+  if (rawVideoIdPattern.test(trimmedInput)) {
+    return {
+      videoId: trimmedInput,
+      normalizedUrl: `https://www.youtube.com/watch?v=${trimmedInput}`,
+    };
+  }
 
-	try {
-		const parsedUrl = new URL(trimmedInput);
-		let parsedVideoId = '';
+  try {
+    const parsedUrl = new URL(trimmedInput);
+    let parsedVideoId = '';
 
-		if (parsedUrl.hostname === 'youtu.be') {
-			parsedVideoId = parsedUrl.pathname.replace('/', '').split('/')[0];
-		} else if (
-			parsedUrl.hostname === 'youtube.com' ||
-			parsedUrl.hostname === 'www.youtube.com' ||
-			parsedUrl.hostname === 'm.youtube.com'
-		) {
-			if (parsedUrl.pathname === '/watch') {
-				parsedVideoId = parsedUrl.searchParams.get('v') || '';
-			} else if (parsedUrl.pathname.startsWith('/embed/')) {
-				parsedVideoId = parsedUrl.pathname.split('/embed/')[1]?.split('/')[0] || '';
-			} else if (parsedUrl.pathname.startsWith('/shorts/')) {
-				parsedVideoId = parsedUrl.pathname.split('/shorts/')[1]?.split('/')[0] || '';
-			}
-		}
+    if (parsedUrl.hostname === 'youtu.be') {
+      parsedVideoId = parsedUrl.pathname.replace('/', '').split('/')[0];
+    } else if (
+      parsedUrl.hostname === 'youtube.com' ||
+      parsedUrl.hostname === 'www.youtube.com' ||
+      parsedUrl.hostname === 'm.youtube.com'
+    ) {
+      if (parsedUrl.pathname === '/watch') {
+        parsedVideoId = parsedUrl.searchParams.get('v') || '';
+      } else if (parsedUrl.pathname.startsWith('/embed/')) {
+        parsedVideoId = parsedUrl.pathname.split('/embed/')[1]?.split('/')[0] || '';
+      } else if (parsedUrl.pathname.startsWith('/shorts/')) {
+        parsedVideoId = parsedUrl.pathname.split('/shorts/')[1]?.split('/')[0] || '';
+      }
+    }
 
-		if (rawVideoIdPattern.test(parsedVideoId)) {
-			return {
-				videoId: parsedVideoId,
-				normalizedUrl: `https://www.youtube.com/watch?v=${parsedVideoId}`
-			};
-		}
-	} catch (_error) {
-		// Ignore URL parse errors and fall back to empty result.
-	}
+    if (rawVideoIdPattern.test(parsedVideoId)) {
+      return {
+        videoId: parsedVideoId,
+        normalizedUrl: `https://www.youtube.com/watch?v=${parsedVideoId}`,
+      };
+    }
+  } catch (_error) {
+    // Invalid URL path; fall through to empty result.
+  }
 
-	return { videoId: '', normalizedUrl: '' };
+  return { videoId: '', normalizedUrl: '' };
 }
 
 function normalizeClipRow(rawRow) {
-	const row = rawRow || {};
-	const parsedFromVideoId = normalizeYouTubeUrl(row.videoId || '');
-	const parsedFromUrl = normalizeYouTubeUrl(row.url || '');
-	const normalizedVideoId = parsedFromVideoId.videoId || parsedFromUrl.videoId || '';
+  const row = rawRow || {};
+  const urlCandidate = row.url || row.videoId || '';
+  const normalizedUrl = normalizeYouTubeUrl(urlCandidate);
 
-	return {
-		videoId: normalizedVideoId || (typeof row.videoId === 'string' ? row.videoId : ''),
-		videoTitle: row.videoTitle ?? '',
-		songTitle: row.songTitle ?? '',
-		artist: row.artist ?? '',
-		startTime: row.startTime ?? '',
-		endTime: row.endTime ?? '',
-		audioUrl: row.audioUrl ?? null
-	};
+  const startRaw = row.startTime ?? row.startSeconds ?? 0;
+  const endRaw = row.endTime ?? row.endSeconds ?? 0;
+  const startTime = toSeconds(startRaw);
+  const endTime = toSeconds(endRaw);
+
+  return {
+    url: normalizedUrl.normalizedUrl || (typeof row.url === 'string' ? row.url : ''),
+    videoId: normalizedUrl.videoId || (typeof row.videoId === 'string' ? row.videoId : ''),
+    songTitle: row.songTitle ?? '',
+    artist: row.artist ?? '',
+    videoTitle: row.videoTitle ?? '',
+    startTime: Number.isFinite(startTime) ? startTime : 0,
+    endTime: Number.isFinite(endTime) ? endTime : 0,
+    audioUrl: row.audioUrl ?? null,
+  };
 }
 
 function App() {
-	const [videoId, setVideoId] = useState('');
-	const [videoTitle, setVideoTitle] = useState('');
-	const [songTitle, setSongTitle] = useState('');
-	const [artist, setArtist] = useState('');
-	const [startTime, setStartTime] = useState('');
-	const [endTime, setEndTime] = useState('');
-	const [_audioUrl, setAudioUrl] = useState('');
-	const [tableData, setTableData] = useState([]);
-	const [key, setKey] = useState(0); // Initialize key state
-	const [startTimeConverted, setStartTimeConverted] = useState('');
-	const [endTimeConverted, setEndTimeConverted] = useState('');
-	const [isGeneratingMp3, setIsGeneratingMp3] = useState(false);
-	const [generateMp3Error, setGenerateMp3Error] = useState('');
-	const [copiedRowIndex, setCopiedRowIndex] = useState(null);
-	const fileInputRef = useRef(null);
-	const { videoId: parsedVideoId } = normalizeYouTubeUrl(videoId);
+  const [videos, setVideos] = useState([]);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [roundName, setRoundName] = useState('');
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [previewNonce, setPreviewNonce] = useState(0);
+  const [isGeneratingMp3, setIsGeneratingMp3] = useState(false);
+  const [generateMp3Error, setGenerateMp3Error] = useState('');
 
-	useEffect(() => {
-		try {
-			const savedRound = localStorage.getItem(ROUND_STORAGE_KEY);
-			if (!savedRound) {
-				return;
-			}
+  const fileInputRef = useRef(null);
 
-			const parsedRound = JSON.parse(savedRound);
-			if (Array.isArray(parsedRound)) {
-				const normalizedRound = parsedRound.map((row) => normalizeClipRow(row));
-				setTableData(normalizedRound);
-			}
-		} catch (error) {
-			console.error('Error restoring saved round:', error);
-		}
-	}, []);
+  useEffect(() => {
+    try {
+      const savedRound = localStorage.getItem(ROUND_STORAGE_KEY);
+      if (!savedRound) {
+        return;
+      }
 
-	useEffect(() => {
-		try {
-			localStorage.setItem(ROUND_STORAGE_KEY, JSON.stringify(tableData));
-		} catch (error) {
-			console.error('Error saving round:', error);
-		}
-	}, [tableData]);
+      const parsed = JSON.parse(savedRound);
+      const importedRows = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.videos)
+          ? parsed.videos
+          : Array.isArray(parsed?.clips)
+            ? parsed.clips
+            : null;
 
-	useEffect(() => {
-		if (parsedVideoId) {
-			const id = parsedVideoId;
+      if (typeof parsed?.roundName === 'string') {
+        setRoundName(parsed.roundName);
+      }
 
-			// Fetch video title based on the video ID using the YouTube API
-			axios.get(`https://www.googleapis.com/youtube/v3/videos?id=${id}&part=snippet&key=AIzaSyB7fPei93AWIS4gg0kcx3KeFqVndYCv0es`)
-				.then((response) => {
-					const title = response.data.items[0]?.snippet?.title;
-					setVideoTitle(title || 'Video Title not available');
-				})
-				.catch((error) => {
-					console.error('Error fetching video title:', error);
-				});
-		} else {
-			setVideoTitle('');
-		}
-	}, [videoId, parsedVideoId]);
+      if (importedRows) {
+        const normalizedRows = importedRows.map((row) => normalizeClipRow(row));
+        setVideos(normalizedRows);
+      }
+    } catch (error) {
+      console.error('Error restoring saved round:', error);
+    }
+  }, []);
 
-	const handleReloadVideoClick = () => {
-		// Increment the key to force re-render of YouTubePlayer component
-		setKey((prevKey) => prevKey + 1);
-	}
+  useEffect(() => {
+    try {
+      const payload = { roundName, videos };
+      localStorage.setItem(ROUND_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.error('Error saving round:', error);
+    }
+  }, [roundName, videos]);
 
-	function convertTime(inputTime) {
-		if (typeof inputTime === 'number') {
-			return inputTime;
-		}
-		if (!inputTime || typeof inputTime !== 'string') {
-			return NaN;
-		}
+  const addVideo = (video) => {
+    const normalized = normalizeClipRow(video);
+    setVideos((prevVideos) => [...prevVideos, normalized]);
+    setSelectedVideo(normalized);
+  };
 
-		const trimmed = inputTime.trim();
-		if (!trimmed) {
-			return NaN;
-		}
+  const moveRow = (index, direction) => {
+    const newPosition = index + direction;
+    if (newPosition < 0 || newPosition >= videos.length) {
+      return;
+    }
 
-		if (!trimmed.includes(':')) {
-			const parsed = Number(trimmed);
-			return Number.isFinite(parsed) ? parsed : NaN;
-		}
+    setVideos((prevVideos) => {
+      const next = [...prevVideos];
+      const [removed] = next.splice(index, 1);
+      next.splice(newPosition, 0, removed);
+      return next;
+    });
+  };
 
-		const parts = trimmed.split(':').map((part) => Number(part));
-		if (parts.some((part) => !Number.isFinite(part))) {
-			return NaN;
-		}
+  const removeVideo = (index) => {
+    setVideos((prevVideos) => {
+      const toRemove = prevVideos[index];
+      const updated = prevVideos.filter((_, i) => i !== index);
 
-		return parts.reduce((total, part) => (total * 60) + part, 0);
-	}
+      if (selectedVideo && toRemove && selectedVideo.url === toRemove.url && selectedVideo.startTime === toRemove.startTime && selectedVideo.endTime === toRemove.endTime) {
+        setSelectedVideo(null);
+      }
 
-	const handleStartTimeChange = (event) => {
-		const inputTime = event.target.value;
-		const convertedTime = convertTime(inputTime);
-		setStartTimeConverted(Number.isFinite(convertedTime) ? convertedTime : '');
-		setStartTime(inputTime); // Set the original start time
-	};
+      return updated;
+    });
+  };
 
-	const handleEndTimeChange = (event) => {
-		const inputTime = event.target.value;
-		const convertedTime = convertTime(inputTime);
-		setEndTimeConverted(Number.isFinite(convertedTime) ? convertedTime : '');
-		setEndTime(inputTime); // Set the original start time
-	};
+  const previewVideo = (video) => {
+    setSelectedVideo(video);
+    setPreviewNonce((prev) => prev + 1);
+  };
 
-	const handleCompleteClick = () => {
-		// Ensure the videoId, startTime, and endTime are filled in before proceeding
-		if (!videoId || !startTime || !endTime) {
-			alert("Please enter a YouTube video URL and specify start and end times.");
-			return;
-		}
+  const updatePreview = (url) => {
+    const normalized = normalizeYouTubeUrl(url);
+    if (!normalized.videoId) {
+      setSelectedVideo(null);
+      return;
+    }
 
-		console.log("handleCompleteClick triggered");
+    setSelectedVideo((current) => ({
+      ...(current || {}),
+      url: normalized.normalizedUrl,
+      videoId: normalized.videoId,
+      startTime: 0,
+      endTime: 0,
+    }));
+  };
 
-		// Trigger the server to create the audio file based on the videoId and time range
-		axios.post('http://localhost:5000/', { url: videoId, startTime, endTime }, { responseType: 'arraybuffer' })
-			.then((response) => {
-				console.log("handleCompleteClick triggered, axios post");
-				const audioBlob = null; //new Blob([response.data], { type: 'audio/m4a' });
-				const audioUrl = null; //URL.createObjectURL(audioBlob);
+  const updatePreviewWithTimestamps = (url, startTime, endTime) => {
+    const normalized = normalizeYouTubeUrl(url);
+    if (!normalized.videoId) {
+      return;
+    }
 
-				// Update the state after getting the audio URL
-				setAudioUrl(audioUrl);
+    setSelectedVideo((current) => ({
+      ...(current || {}),
+      url: normalized.normalizedUrl,
+      videoId: normalized.videoId,
+      startTime,
+      endTime,
+    }));
+    setPreviewNonce((prev) => prev + 1);
+  };
 
-					// Add a new row
-					setTableData((prevData) => [
-						...prevData,
-						{ videoId, videoTitle, songTitle, artist, startTime, endTime, audioUrl }
-					]);
+  const copyUrl = async (index) => {
+    const row = videos[index];
+    const normalized = normalizeYouTubeUrl(row?.url || row?.videoId || '');
+    const urlToCopy = normalized.normalizedUrl || row?.url || row?.videoId || '';
 
-				// // Check if the app is in edit mode or adding a new row
-				// if (isEditMode && selectedRowIndex !== null) {
-				//   // Update the existing row
-				//   setTableData((prevData) =>
-				//     prevData.map((row, index) =>
-				//       index === selectedRowIndex
-				//         ? { videoId, videoTitle, startTime, endTime, audioUrl }  // update the selected row
-				//         : row
-				//     )
-				//   );
-				//   setIsEditMode(false);
-				// } else {
-				//   // Otherwise, add a new row
-				//   setTableData((prevData) => [
-				//     ...prevData,
-				//     { videoId, videoTitle, startTime, endTime, audioUrl }
-				//   ]);
-				// }
+    if (!urlToCopy) {
+      return;
+    }
 
-				// Reset form values
-					setVideoId('');
-					setVideoTitle('');
-					setSongTitle('');
-					setArtist('');
-					setStartTime('');
-					setEndTime('');
-					setAudioUrl('');
-			})
-			.catch((error) => {
-				console.error('Error triggering audio creation on the server:', error);
-			});
-	};
+    try {
+      await navigator.clipboard.writeText(urlToCopy);
+      setCopiedIndex(index);
+      setTimeout(() => {
+        setCopiedIndex((current) => (current === index ? null : current));
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+    }
+  };
 
-	const handleDeleteClick = (index) => {
-		// Delete the selected row
-		setTableData((prevData) => prevData.filter((row, i) => i !== index));
-	};
+  const handleLoadPreviousRounds = () => {
+    fileInputRef.current?.click();
+  };
 
-	const handleMoveUpClick = (index) => {
-		// Move the selected row up in the table
-		if (index > 0) {
-			setTableData((prevData) => {
-				const newData = [...prevData];
-				[newData[index], newData[index - 1]] = [newData[index - 1], newData[index]];
-				return newData;
-			});
-		}
-	};
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
 
-	const handleMoveDownClick = (index) => {
-		// Move the selected row down in the table
-		if (index < tableData.length - 1) {
-			setTableData((prevData) => {
-				const newData = [...prevData];
-				[newData[index], newData[index + 1]] = [newData[index + 1], newData[index]];
-				return newData;
-			});
-		}
-	};
+    try {
+      const fileContents = await file.text();
+      const parsedJson = JSON.parse(fileContents);
+      const importedRows = Array.isArray(parsedJson)
+        ? parsedJson
+        : Array.isArray(parsedJson?.clips)
+          ? parsedJson.clips
+          : Array.isArray(parsedJson?.videos)
+            ? parsedJson.videos
+            : null;
 
-	const loadRowToForm = (selectedRow) => {
-		setVideoId(selectedRow.videoId);
-		setVideoTitle(selectedRow.videoTitle);
-		setSongTitle(selectedRow.songTitle || '');
-		setArtist(selectedRow.artist || '');
-		setStartTime(selectedRow.startTime);
-		setStartTimeConverted(convertTime(selectedRow.startTime));
-		setEndTime(selectedRow.endTime);
-		setEndTimeConverted(convertTime(selectedRow.endTime));
-		setAudioUrl(selectedRow.audioUrl);
-	};
+      if (!importedRows) {
+        throw new Error('JSON does not contain a valid clips or videos array.');
+      }
 
-	const handlePreviewClick = (index) => {
-		const selectedRow = tableData[index];
-		loadRowToForm(selectedRow);
-	};
+      const normalizedRows = importedRows.map((row) => normalizeClipRow(row));
+      setVideos(normalizedRows);
+      setSelectedVideo(null);
 
-	const handlePlayClick = (index) => {
-		// Set the form values to the selected row's values
-		const selectedRow = tableData[index];
-		loadRowToForm(selectedRow);
+      if (typeof parsedJson?.roundName === 'string') {
+        setRoundName(parsedJson.roundName);
+      }
+    } catch (error) {
+      console.error('Error importing round JSON:', error);
+      alert('Failed to load the file: Invalid or unsupported JSON format.');
+    } finally {
+      event.target.value = '';
+    }
+  };
 
-		// Play the corresponding intro and main audio
-		const audioIntro = new Audio(`/number_${index + 1}.mp3`);
-		const audioSong = new Audio(selectedRow.audioUrl);
+  const handleExportRoundJsonClick = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      roundName,
+      videos,
+      clips: videos,
+    };
 
-		audioIntro.addEventListener('ended', () => {
-			console.log('Intro playback completed');
-			audioSong.play();
-		});
+    const filename = `${(roundName || 'Music_Trivia_Round').replace(/\s+/g, '_')}.json`;
+    downloadJsonFile(JSON.stringify(payload, null, 2), filename);
+  };
 
-		// Start playing the intro audio
-		audioIntro.play();
+  const handleGenerateMp3Click = async () => {
+    setGenerateMp3Error('');
 
-		// Function to stop both audios
-		const stopAudio = () => {
-			audioIntro.pause();
-			audioSong.pause();
-			audioIntro.currentTime = 0;
-			audioSong.currentTime = 0;
-		};
+    if (videos.length === 0) {
+      setGenerateMp3Error('Add at least one clip before generating MP3.');
+      return;
+    }
 
-		// Add an event listener to stop the audio on click
-		const handleDocumentClick = () => {
-			stopAudio();
-			// Remove event listener after click
-			document.removeEventListener('click', handleDocumentClick);
-		};
+    const renderClips = [];
+    for (let i = 0; i < videos.length; i += 1) {
+      const row = videos[i];
+      const normalized = normalizeYouTubeUrl(row.url || row.videoId || '');
+      const clipUrl = normalized.normalizedUrl || row.url || row.videoId || '';
 
-		document.addEventListener('click', handleDocumentClick);
-	};
+      if (!clipUrl) {
+        setGenerateMp3Error(`Clip ${i + 1} has an invalid YouTube URL/ID.`);
+        return;
+      }
 
-	const handleCopyUrlClick = async (index) => {
-		const selectedRow = tableData[index];
-		const normalized = normalizeYouTubeUrl(selectedRow.videoId);
-		const urlToCopy = normalized.normalizedUrl || selectedRow.videoId || '';
+      if (!Number.isFinite(row.startTime) || !Number.isFinite(row.endTime) || row.endTime <= row.startTime) {
+        setGenerateMp3Error(`Clip ${i + 1} has invalid start/end time.`);
+        return;
+      }
 
-		if (!urlToCopy) {
-			return;
-		}
+      renderClips.push({
+        url: clipUrl,
+        startSeconds: row.startTime,
+        endSeconds: row.endTime,
+      });
+    }
 
-		try {
-			await navigator.clipboard.writeText(urlToCopy);
-			setCopiedRowIndex(index);
-			setTimeout(() => {
-				setCopiedRowIndex((current) => (current === index ? null : current));
-			}, 2000);
-		} catch (error) {
-			console.error('Failed to copy URL:', error);
-		}
-	};
+    setIsGeneratingMp3(true);
 
-	const handleClearRoundClick = () => {
-		const shouldClear = window.confirm('Clear all clips from this round?');
-		if (!shouldClear) {
-			return;
-		}
+    try {
+      const response = await axios.post(
+        'http://localhost:5000/api/rounds/render',
+        { clips: renderClips },
+        { responseType: 'blob' }
+      );
 
-		setTableData([]);
-	};
+      const downloadUrl = URL.createObjectURL(response.data);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = downloadUrl;
+      downloadLink.download = 'round.mp3';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      let message = 'Failed to generate MP3.';
 
-	const handleExportRoundJsonClick = () => {
-		const roundPayload = {
-			exportedAt: new Date().toISOString(),
-			clips: tableData
-		};
-		const jsonBlob = new Blob([JSON.stringify(roundPayload, null, 2)], { type: 'application/json' });
-		const objectUrl = URL.createObjectURL(jsonBlob);
-		const downloadLink = document.createElement('a');
-		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+        const responseText = await error.response.data.text();
+        try {
+          const parsedError = JSON.parse(responseText);
+          message = parsedError.error || message;
+        } catch (_parseError) {
+          message = responseText || message;
+        }
+      }
 
-		downloadLink.href = objectUrl;
-		downloadLink.download = `music-round-${timestamp}.json`;
-		document.body.appendChild(downloadLink);
-		downloadLink.click();
-		document.body.removeChild(downloadLink);
-		URL.revokeObjectURL(objectUrl);
-	};
+      setGenerateMp3Error(message);
+    } finally {
+      setIsGeneratingMp3(false);
+    }
+  };
 
-	const handleLoadPreviousRounds = () => {
-		fileInputRef.current?.click();
-	};
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-8">
+      <div className="container mx-auto px-4">
+        <div className="p-4">
+          <h1 className="text-center text-3xl font-bold text-gray-900">Jenny&apos;s Music Trivia Lab</h1>
+          <button
+            type="button"
+            onClick={handleLoadPreviousRounds}
+            className="absolute right-4 top-4 rounded px-4 py-2 font-bold text-gray-800 focus:outline-none focus:shadow-outline"
+          >
+            Load Previous Rounds
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".json,application/json"
+            className="hidden"
+          />
+        </div>
 
-	const handleFileUpload = async (event) => {
-		const file = event.target.files?.[0];
-		if (!file) {
-			return;
-		}
+        <div className="rounded-lg bg-white p-6 shadow-md">
+          <div className="flex flex-col space-y-4 md:flex-row md:space-x-4 md:space-y-0">
+            <div className="md:flex-1">
+              <InputForm
+                addVideo={addVideo}
+                updatePreview={updatePreview}
+                updatePreviewWithTimestamps={updatePreviewWithTimestamps}
+              />
+            </div>
+            <div className="md:flex-1">
+              {selectedVideo ? (
+                <YouTubePlayer
+                  key={`${selectedVideo.videoId}-${selectedVideo.startTime}-${selectedVideo.endTime}-${previewNonce}`}
+                  videoId={selectedVideo.videoId}
+                  startTime={selectedVideo.startTime}
+                  endTime={selectedVideo.endTime}
+                />
+              ) : (
+                <div className="flex aspect-video w-full items-center justify-center rounded-md border border-gray-200 bg-gray-200">
+                  <span className="text-sm text-gray-500">No video selected</span>
+                </div>
+              )}
+            </div>
+          </div>
 
-		try {
-			const fileContents = await file.text();
-			const parsedJson = JSON.parse(fileContents);
-			const importedRows = Array.isArray(parsedJson)
-				? parsedJson
-				: Array.isArray(parsedJson?.clips)
-					? parsedJson.clips
-					: Array.isArray(parsedJson?.videos)
-						? parsedJson.videos
-						: null;
+          <div className="mt-6">
+            <VideoTable
+              videos={videos}
+              moveRow={moveRow}
+              previewVideo={previewVideo}
+              removeVideo={removeVideo}
+              copyUrl={copyUrl}
+              copiedIndex={copiedIndex}
+            />
 
-			if (!importedRows) {
-				throw new Error('JSON does not contain a valid clips or videos array.');
-			}
-
-			const normalizedRows = importedRows.map((row) => normalizeClipRow(row));
-			setTableData(normalizedRows);
-		} catch (error) {
-			console.error('Error importing round JSON:', error);
-			alert('Failed to load the file: Invalid or unsupported JSON format.');
-		} finally {
-			event.target.value = '';
-		}
-	};
-
-	const handleGenerateMp3Click = async () => {
-		setGenerateMp3Error('');
-		if (tableData.length === 0) {
-			setGenerateMp3Error('Add at least one clip before generating MP3.');
-			return;
-		}
-
-		const renderClips = [];
-		for (let i = 0; i < tableData.length; i += 1) {
-			const clip = tableData[i];
-			const normalizedClip = normalizeYouTubeUrl(clip.videoId);
-			const startSeconds = convertTime(clip.startTime);
-			const endSeconds = convertTime(clip.endTime);
-			const clipUrl = normalizedClip.normalizedUrl || (clip.videoId || '').trim();
-
-			if (!clipUrl) {
-				setGenerateMp3Error(`Clip ${i + 1} has an invalid YouTube URL/ID.`);
-				return;
-			}
-
-			if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) {
-				setGenerateMp3Error(`Clip ${i + 1} has invalid start/end time.`);
-				return;
-			}
-
-			renderClips.push({
-				url: clipUrl,
-				startSeconds,
-				endSeconds
-			});
-		}
-
-		setIsGeneratingMp3(true);
-		try {
-			const response = await axios.post(
-				'http://localhost:5000/api/rounds/render',
-				{ clips: renderClips },
-				{ responseType: 'blob' }
-			);
-
-			const downloadUrl = URL.createObjectURL(response.data);
-			const downloadLink = document.createElement('a');
-			downloadLink.href = downloadUrl;
-			downloadLink.download = 'round.mp3';
-			document.body.appendChild(downloadLink);
-			downloadLink.click();
-			document.body.removeChild(downloadLink);
-			URL.revokeObjectURL(downloadUrl);
-		} catch (error) {
-			let message = 'Failed to generate MP3.';
-
-			if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
-				const responseText = await error.response.data.text();
-				try {
-					const parsedError = JSON.parse(responseText);
-					message = parsedError.error || message;
-				} catch (_parseError) {
-					message = responseText || message;
-				}
-			}
-
-			setGenerateMp3Error(message);
-		} finally {
-			setIsGeneratingMp3(false);
-		}
-	};
-
-	return (
-		<div className="min-h-screen bg-gray-100 py-8">
-			<div className="container mx-auto max-w-6xl px-4">
-				<div className="rounded-lg bg-white p-6 shadow-md">
-					<div className="mb-6 flex items-center justify-between">
-						<h1 className="text-2xl font-bold text-gray-900">Music Round Builder</h1>
-						<button
-							className="rounded-md bg-gray-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400"
-							onClick={handleLoadPreviousRounds}
-						>
-							Load Previous Rounds
-						</button>
-						<input
-							ref={fileInputRef}
-							type="file"
-							accept=".json,application/json"
-							onChange={handleFileUpload}
-							className="hidden"
-						/>
-					</div>
-						<div className="space-y-4">
-							<input
-								className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-								type="text"
-								placeholder="Enter YouTube Video URL or ID"
-								value={videoId}
-								onChange={(e) => setVideoId(e.target.value)}
-							/>
-						<YouTubePlayer
-							videoId={parsedVideoId}
-							startTime={startTimeConverted.toString()}
-							endTime={endTimeConverted.toString()}
-							key={key}
-						/>
-							<input
-								className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-								type="text"
-								placeholder="Video Title"
-								value={videoTitle}
-								onChange={(e) => setVideoTitle(e.target.value)}
-							/>
-							<div className="grid gap-4 md:grid-cols-2">
-								<input
-									className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-									type="text"
-									placeholder="Song Title (optional)"
-									value={songTitle}
-									onChange={(e) => setSongTitle(e.target.value)}
-								/>
-								<input
-									className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-									type="text"
-									placeholder="Artist (optional)"
-									value={artist}
-									onChange={(e) => setArtist(e.target.value)}
-								/>
-							</div>
-						<div className="grid gap-4 md:grid-cols-3">
-							<label className="text-sm font-medium text-gray-700">
-								Start Time:
-									<input
-										className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-										type="text"
-										placeholder="0:00"
-										value={startTime}
-										onChange={handleStartTimeChange}
-								/>
-								<input
-									type="hidden"
-									value={startTimeConverted}
-								/>
-							</label>
-							<label className="text-sm font-medium text-gray-700">
-								End Time:
-									<input
-										className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-										type="text"
-										placeholder="0:00"
-										value={endTime}
-										onChange={handleEndTimeChange}
-								/>
-								<input
-									type="hidden"
-									value={endTimeConverted}
-								/>
-							</label>
-								<div className="flex items-end">
-									<button
-										className="w-full rounded-md bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 transition hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
-										onClick={handleReloadVideoClick}
-									>
-										Reload Video
-									</button>
-							</div>
-						</div>
-							<div className="flex flex-wrap gap-2">
-								<button
-									className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-									onClick={handleCompleteClick}
-								>
-									Complete
-								</button>
-								<button
-									className="rounded-md bg-gray-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300"
-									onClick={handleClearRoundClick}
-								>
-									Clear round
-								</button>
-								<button
-									className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-									onClick={handleExportRoundJsonClick}
-								>
-									Export round JSON
-								</button>
-								<button
-									className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-60"
-									onClick={handleGenerateMp3Click}
-									disabled={isGeneratingMp3}
-								>
-									{isGeneratingMp3 ? 'Generating MP3...' : 'Generate MP3'}
-							</button>
-						</div>
-						{generateMp3Error && <p className="text-sm text-red-600">{generateMp3Error}</p>}
-							<EditableTable
-								data={tableData}
-								onDelete={handleDeleteClick}
-								onMoveUp={handleMoveUpClick}
-								onMoveDown={handleMoveDownClick}
-								onPreview={handlePreviewClick}
-								onPlay={handlePlayClick}
-								onCopyUrl={handleCopyUrlClick}
-								copiedRowIndex={copiedRowIndex}
-								showVideoId={false}
-							/>
-						</div>
-				</div>
-			</div>
-		</div>
-	);
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+              <input
+                type="text"
+                value={roundName}
+                onChange={(event) => setRoundName(event.target.value)}
+                placeholder="Enter Round Name (optional)"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <button
+                type="button"
+                onClick={handleExportRoundJsonClick}
+                className="rounded bg-indigo-600 px-4 py-2 font-bold text-white hover:bg-indigo-700 focus:outline-none focus:shadow-outline"
+              >
+                Export round JSON
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateMp3Click}
+                disabled={isGeneratingMp3}
+                className="rounded bg-green-600 px-4 py-2 font-bold text-white hover:bg-green-700 focus:outline-none focus:shadow-outline disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGeneratingMp3 ? 'Generating MP3...' : 'Generate MP3'}
+              </button>
+            </div>
+            {generateMp3Error && <p className="mt-2 text-sm text-red-600">{generateMp3Error}</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
-
-// Table component
-const EditableTable = ({
-	data,
-	onDelete,
-	onMoveUp,
-	onMoveDown,
-	onPreview,
-	onPlay,
-	onCopyUrl,
-	copiedRowIndex,
-	showVideoId
-}) => {
-	return (
-		<div className="overflow-x-auto rounded-md border border-gray-200">
-			<table className="min-w-full border-collapse">
-				<thead className="bg-gray-50">
-					<tr>
-						<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600"></th>
-						{showVideoId && <th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Video ID</th>}
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Video Title</th>
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Song Title</th>
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Artist</th>
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Start Time</th>
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">End Time</th>
-							<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Audio URL</th>
-						<th className="border border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Action</th>
-					</tr>
-				</thead>
-					<tbody className="divide-y divide-gray-200 bg-white">
-						{data.map((row, index) => (
-							<tr key={index} className="hover:bg-gray-50">
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{index + 1}</td>
-								{showVideoId && <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.videoId}</td>}
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.videoTitle}</td>
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.songTitle || ''}</td>
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.artist || ''}</td>
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.startTime}</td>
-								<td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.endTime}</td>
-								<td className="max-w-xs truncate border border-gray-200 px-3 py-2 text-sm text-gray-700">{row.audioUrl}</td>
-								<td className="border border-gray-200 px-3 py-2">
-									<div className="flex gap-2">
-										<button className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onPreview(index)}>Preview</button>
-										<button className="rounded-md bg-slate-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300" onClick={() => onCopyUrl(index)}>
-											{copiedRowIndex === index ? 'Copied!' : 'Copy URL'}
-										</button>
-										<button className="rounded-md bg-green-500 px-2 py-1 text-white transition hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300" onClick={() => onPlay(index)}><FaPlay /></button>
-										<button className="rounded-md bg-blue-500 px-2 py-1 text-white transition hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onMoveUp(index)}><FaArrowUp /></button>
-										<button className="rounded-md bg-blue-500 px-2 py-1 text-white transition hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300" onClick={() => onMoveDown(index)}><FaArrowDown /></button>
-										<button className="rounded-md bg-red-500 px-2 py-1 text-white transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300" onClick={() => onDelete(index)}><FaTrash /></button>
-									</div>
-								{/* <button onClick={() => onPause(index)}><FaPause /></button> */}
-							</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	);
-};
 
 export default App;
