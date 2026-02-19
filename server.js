@@ -2,8 +2,7 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
-const ytdl = require("ytdl-core");
+const { spawn, spawnSync } = require("child_process");
 const express = require("express");
 const cors = require("cors");
 
@@ -12,6 +11,7 @@ const http = require("http").createServer(app);
 const port = process.env.PORT || 5000;
 
 const INTRO_TRACK_COUNT = 15;
+const DEFAULT_YT_DLP_COMMAND = process.env.YT_DLP_PATH || "yt-dlp";
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
@@ -36,22 +36,82 @@ function runFfmpeg(args) {
   });
 }
 
-function downloadAudioSource(videoURL, outputPath) {
+function runYtDlp(args) {
   return new Promise((resolve, reject) => {
-    const source = ytdl(videoURL, {
-      filter: "audioonly",
-      quality: "highestaudio",
-      highWaterMark: 1 << 25,
+    const ytDlp = spawn(DEFAULT_YT_DLP_COMMAND, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    let stdout = "";
+
+    ytDlp.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
     });
 
-    const output = fs.createWriteStream(outputPath);
+    ytDlp.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
-    source.on("error", reject);
-    output.on("error", reject);
-    output.on("finish", resolve);
+    ytDlp.on("error", (error) => {
+      reject(error);
+    });
 
-    source.pipe(output);
+    ytDlp.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const commandText = `${DEFAULT_YT_DLP_COMMAND} ${args.join(" ")}`;
+      const err = new Error(
+        `yt-dlp exited with code ${code}. Command: ${commandText}\n${stderr || stdout}`
+      );
+      err.exitCode = code;
+      reject(err);
+    });
   });
+}
+
+function getYtDlpDiagnostics() {
+  const whichResult = spawnSync("which", [DEFAULT_YT_DLP_COMMAND], { encoding: "utf8" });
+  const versionResult = spawnSync(DEFAULT_YT_DLP_COMMAND, ["--version"], { encoding: "utf8" });
+
+  const whichText = whichResult.status === 0
+    ? (whichResult.stdout || "").trim()
+    : `not found (${(whichResult.stderr || whichResult.error?.message || "").trim() || "unknown"})`;
+
+  const versionText = versionResult.status === 0
+    ? (versionResult.stdout || "").trim()
+    : `unavailable (${(versionResult.stderr || versionResult.error?.message || "").trim() || "unknown"})`;
+
+  return { whichText, versionText };
+}
+
+async function downloadAudioSource(videoURL, outputPath) {
+  const baseArgs = [
+    "-f",
+    "bestaudio/best",
+    "--no-playlist",
+    "--no-progress",
+    "--force-overwrites",
+    "-o",
+    outputPath,
+    videoURL,
+  ];
+
+  try {
+    await runYtDlp(baseArgs);
+    return;
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      throw error;
+    }
+  }
+
+  await runYtDlp([
+    ...baseArgs.slice(0, 4),
+    "--extractor-args",
+    "youtube:player_client=android",
+    ...baseArgs.slice(4),
+  ]);
 }
 
 function getClipUrl(clip) {
@@ -100,14 +160,16 @@ function validateRoundInput(body) {
 }
 
 async function trimClipToMp3(sourcePath, outputPath, startSeconds, endSeconds) {
+  const durationSeconds = endSeconds - startSeconds;
+
   await runFfmpeg([
     "-y",
-    "-i",
-    sourcePath,
     "-ss",
     String(startSeconds),
-    "-to",
-    String(endSeconds),
+    "-t",
+    String(durationSeconds),
+    "-i",
+    sourcePath,
     "-vn",
     "-ac",
     "2",
@@ -129,7 +191,7 @@ async function renderRoundMp3(clips, tempDir) {
     const clipUrl = getClipUrl(clip);
     const startSeconds = parseSeconds(clip.startSeconds ?? clip.startTime);
     const endSeconds = parseSeconds(clip.endSeconds ?? clip.endTime);
-    const sourcePath = path.join(tempDir, `source-${i + 1}.webm`);
+    const sourcePath = path.join(tempDir, `source-${i + 1}.m4a`);
     const clippedPath = path.join(tempDir, `clip-${i + 1}.mp3`);
     const introIndex = (i % INTRO_TRACK_COUNT) + 1;
     const introPath = path.join(__dirname, "public", `number_${introIndex}.mp3`);
@@ -169,22 +231,9 @@ async function renderRoundMp3(clips, tempDir) {
   return outputPath;
 }
 
-function getAudio(videoURL, res) {
-  ytdl(videoURL, { filter: "audioonly" })
-    .on("end", () => {
-      console.log("Audio Downloaded");
-    })
-    .pipe(res);
-}
-
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
-
-app.post("/", (req, res) => {
-  console.log("POST request received:", req.body);
-  getAudio(req.body.url, res);
-});
 
 app.post("/api/rounds/render", async (req, res) => {
   const validationError = validateRoundInput(req.body);
@@ -213,12 +262,22 @@ app.post("/api/rounds/render", async (req, res) => {
     console.error("Round render failed:", error);
     await fsp.rm(tempDir, { recursive: true, force: true });
 
-    const isFfmpegMissing = error && error.code === "ENOENT";
+    const isFfmpegMissing = error && error.code === "ENOENT" && /ffmpeg/i.test(String(error.message || ""));
+    const isYtDlpMissing = error && error.code === "ENOENT" && /yt-dlp/i.test(String(error.message || ""));
+    const ytDlpDiagnostics = getYtDlpDiagnostics();
+
     res.status(500).json({
-      error: isFfmpegMissing
-        ? "ffmpeg is not installed or not in PATH."
-        : "Failed to render round MP3.",
+      error: isYtDlpMissing
+        ? "yt-dlp is not installed or not in PATH."
+        : isFfmpegMissing
+          ? "ffmpeg is not installed or not in PATH."
+          : "Failed to render round MP3.",
       details: String(error.message || error),
+      ytDlp: {
+        command: DEFAULT_YT_DLP_COMMAND,
+        which: ytDlpDiagnostics.whichText,
+        version: ytDlpDiagnostics.versionText,
+      },
     });
   }
 });

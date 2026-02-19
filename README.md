@@ -6,6 +6,38 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 
 Round clips now support optional metadata fields: `songTitle` and `artist`. These fields are stored in local round data and included when exporting round JSON.
 
+## Backend Prerequisites
+
+The MP3 render endpoint (`POST /api/rounds/render`) requires:
+
+- `ffmpeg` on `PATH`
+- a modern `yt-dlp` on `PATH` (Ubuntu 20.04 apt package is often too old)
+
+Recommended install (pipx):
+
+```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+pipx install yt-dlp
+```
+
+Alternative install (system-wide):
+
+```bash
+sudo python3 -m pip install -U yt-dlp
+```
+
+Verify your install:
+
+```bash
+which yt-dlp
+yt-dlp --version
+```
+
+Optional override:
+
+- Set `YT_DLP_PATH` to point to a specific binary (for example `/usr/local/bin/yt-dlp`).
+
 ## Available Scripts
 
 In the project directory, you can run:
