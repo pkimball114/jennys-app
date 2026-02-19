@@ -87,11 +87,10 @@ function getYtDlpDiagnostics() {
 
 async function downloadAudioSource(videoURL, outputPath) {
   const baseArgs = [
-    "-f",
-    "bestaudio/best",
+    "-f", "bestaudio[ext=m4a]/bestaudio",
     "--no-playlist",
     "--no-progress",
-    "--force-overwrites",
+    "--extractor-args", "youtube:player_client=web",
     "-o",
     outputPath,
     videoURL,
@@ -108,8 +107,6 @@ async function downloadAudioSource(videoURL, outputPath) {
 
   await runYtDlp([
     ...baseArgs.slice(0, 4),
-    "--extractor-args",
-    "youtube:player_client=android",
     ...baseArgs.slice(4),
   ]);
 }
